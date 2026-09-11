@@ -7,7 +7,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 CODE = ['server.py', 'requirements.txt', 'Start Karaoke.command', 'README.md',
         'static/index.html', 'static/styles.css', 'static/app.js', 'static/audio.js',
-        'static/display.html', 'static/display.js']
+        'static/display.html', 'static/display.js', 'docs/media-format.md']
 
 
 def main():

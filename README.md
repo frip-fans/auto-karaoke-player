@@ -1,6 +1,8 @@
-# 本地唱片室
+# auto-karaoke-player · 本地唱片室
 
-离线卡拉 OK 播放器：Flask 本地服务 + 浏览器控制台。沿用 `karaoke-stage` worktree 的深色舞台、青色控件和点歌思路，重写曲库与音频引擎；原 worktree 保持原样。
+独立的离线卡拉 OK 播放器：Flask 本地服务 + 浏览器控制台。按专辑组织曲库、同曲多版本点播、伴奏与纯人声独立混音，以及 HDMI 观众窗口。
+
+从 [auto-karaoke](https://github.com/frip-fans/auto-karaoke) 的 `player/` 拆出，保留播放器子目录历史。只接收最终 MP4，不依赖制作引擎、歌词 JSON、分离模型或 PyTorch。音轨接口见 [MP4 约定](docs/media-format.md)。
 
 ## Mac 启动
 
@@ -15,11 +17,13 @@
 bash "Start Karaoke.command" "/Volumes/My SSD/我的曲库"
 ```
 
-Linux / 已有 Python 环境：
+从源码运行（macOS / Linux）：
 
 ```bash
-python -m pip install -r player/requirements.txt
-python player/server.py --library /path/to/library
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python server.py --library /path/to/library
 ```
 
 仅监听本机 `127.0.0.1`；无登录、云端或外部素材请求。系统依赖和首次 pip 安装需要网络。端口被占用时可用 `server.py --port 8789`。
@@ -58,10 +62,16 @@ songs/
 ## 验证与打包
 
 ```bash
-python -m unittest discover -s player/tests -v
-# 浏览器测试自动创建、清理合成曲库与临时本地服务；需已安装 Playwright / Chromium。
-NODE_PATH=/path/to/node_modules python player/tests/run_browser.py
-python player/package.py --library /path/to/library --output /path/to/Karaoke-Mac.zip
+python -m unittest discover -s tests -v
+# 浏览器测试可选；先激活 Python 虚拟环境。npm 只用于开发测试。
+npm ci
+npx playwright install chromium
+npm run test:browser
+python package.py --library /path/to/library --output /path/to/Karaoke-Mac.zip
 ```
 
 打包不包含 Python 环境、解码缓存或浏览器记录。代码仓库只保存程序和测试，不保存曲库、歌曲或真实歌词。
+
+## 开发边界
+
+本仓库负责曲库、播放、混音与投屏。歌词制作、分离、时间轴审核和视频烧录由制作工具负责。媒体、曲库、缓存和分发 ZIP 不进入 Git；合成测试不使用真实歌曲。默认曲库为根目录 `songs/`，也可用 `--library` 指定任意可读写曲库目录。

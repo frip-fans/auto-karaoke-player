@@ -1,0 +1,29 @@
+# Personal libraries, generated media and caches
+/songs/
+.local/
+.karaoke-cache/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.DS_Store
+.env
+.env.*
+*.log
+*.zip
+*.mp4
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.flac
+*.ogg
+*.webm
+*.mkv
+*.mov
+library.json
+
+# Optional browser regression dependencies
+node_modules/

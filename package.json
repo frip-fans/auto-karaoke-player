@@ -1,0 +1,12 @@
+{
+  "name": "auto-karaoke-player",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser regression tooling for the local karaoke player",
+  "scripts": {
+    "test:browser": "python3 tests/run_browser.py"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

@@ -1,7 +1,7 @@
 // Launched by run_browser.py against a disposable synthetic library.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
-if (!process.env.KARAOKE_TEST_URL) throw Error('Run python player/tests/run_browser.py to create an isolated test library.');
+if (!process.env.KARAOKE_TEST_URL) throw Error('Run python tests/run_browser.py to create an isolated test library.');
 (async()=>{
 const browser=await chromium.launch({headless:true,args:['--autoplay-policy=no-user-gesture-required']});
 const page=await browser.newPage({viewport:{width:1440,height:1050}});
