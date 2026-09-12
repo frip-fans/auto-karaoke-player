@@ -1,0 +1,56 @@
+import { _electron as electron } from 'playwright';
+import { mkdtemp, rm } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import assert from 'node:assert/strict';
+import express from 'express';
+import { listen, closeServer } from '../src/server/app.js';
+import { fixture } from './fixtures.js';
+const root = await mkdtemp(path.join(os.tmpdir(), 'karaoke-desktop-'));
+const occupied = process.env.KARAOKE_TEST_OCCUPIED_PORT ? await listen(express(), 8787) : undefined;
+try {
+  await fixture(path.join(root, 'Synthetic.mp4'), 'Vocals', false, 16, true);
+  const app = await electron.launch({ args: [process.env.KARAOKE_TEST_APP || '.', '--library', root, '--user-data-dir=' + path.join(root, '.profile'), '--disable-gpu', '--no-sandbox', '--autoplay-policy=no-user-gesture-required'], timeout: 30000 });
+  try {
+    const page = await app.firstWindow();
+    const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    await page.waitForFunction(() => window.karaoke?.songs.length === 1);
+    if (occupied) assert.notEqual(new URL(page.url()).port, '8787');
+    const initialOrigin = new URL(page.url()).origin;
+    assert.equal(await page.evaluate(() => typeof window.desktop?.chooseLibrary), 'function');
+    assert.equal(await page.evaluate(() => 'require' in window), false);
+    await page.evaluate(() => window.karaoke.loadSong(window.karaoke.songs[0].id));
+    await page.waitForFunction(() => window.karaoke.player.playing);
+    await app.context().addInitScript(() => { if (location.pathname === '/display') window.requestAnimationFrame = () => 0; });
+    const popupEvent = page.waitForEvent('popup'); await page.click('#display'); const popup = await popupEvent;
+    await popup.waitForFunction(() => document.querySelector('video')?.getAttribute('src'));
+    assert.equal(await popup.locator('video').evaluate((video: HTMLVideoElement) => video.muted), true);
+    await popup.waitForFunction(() => document.querySelector('video')!.currentTime > .2);
+    const sample = () => popup.locator('video').evaluate((video: HTMLVideoElement) => ({ time: video.currentTime, frames: video.getVideoPlaybackQuality().totalVideoFrames, paused: video.paused }));
+    const first = await sample();
+    await app.evaluate(({ BrowserWindow }) => { const audience = BrowserWindow.getAllWindows().find(w => new URL(w.webContents.getURL()).pathname === '/display')!; audience.hide(); BrowserWindow.getAllWindows().find(w => w !== audience)!.focus(); });
+    await page.locator('#search').fill('Synthetic');
+    await page.waitForTimeout(1200);
+    const hidden = await sample(); assert.ok(hidden.time > first.time + .5, JSON.stringify({first, hidden})); assert.equal(hidden.paused, false);
+    await page.evaluate(() => window.karaoke.seek(5));
+    await popup.waitForFunction(() => document.querySelector('video')!.currentTime >= 5);
+    await app.evaluate(({ BrowserWindow }) => { const audience = BrowserWindow.getAllWindows().find(w => new URL(w.webContents.getURL()).pathname === '/display')!; audience.show(); audience.minimize(); });
+    const minimized = await sample(); await page.waitForTimeout(1000); const after = await sample();
+    assert.ok(after.time > minimized.time + .4, JSON.stringify({minimized, after})); assert.equal(after.paused, false);
+    await app.evaluate(({ BrowserWindow }) => { const audience = BrowserWindow.getAllWindows().find(w => new URL(w.webContents.getURL()).pathname === '/display')!; audience.restore(); audience.show(); });
+    await popup.waitForFunction(previous => document.querySelector('video')!.getVideoPlaybackQuality().totalVideoFrames > previous, after.frames);
+    const expected = await page.evaluate(() => window.karaoke.player.position());
+    const restored = await sample(); assert.ok(Math.abs(restored.time - expected) < .5, JSON.stringify({restored, expected}));
+    await page.evaluate(() => window.karaoke.pause());
+    await popup.waitForFunction(() => document.querySelector('video')!.paused);
+    assert.equal(await popup.evaluate(() => 'require' in window), false); assert.deepEqual(errors, []);
+    const otherFolder = path.join(root, 'other-library');
+    await app.evaluate(({ dialog }, folder) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [folder] }); }, otherFolder);
+    await page.locator('summary').click();
+    await page.getByRole('button', { name: '选择曲库文件夹' }).click();
+    await page.waitForFunction(folder => window.karaoke?.folder === folder && window.karaoke.songs.length === 0, otherFolder);
+    assert.equal(new URL(page.url()).origin, initialOrigin);
+    if (occupied) assert.ok(occupied.listening);
+    console.log('PASS: Electron boots Node service, isolated preload, playback without rAF, hidden/minimized audience progress, restored frames, pause synchronization and library switching.');
+  } finally { await app.close(); }
+} finally { if (occupied) await closeServer(occupied); await rm(root, { recursive: true, force: true }); }

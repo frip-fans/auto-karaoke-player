@@ -1,12 +1,61 @@
 {
   "name": "auto-karaoke-player",
-  "version": "0.1.0",
+  "version": "0.1.7",
   "private": true,
-  "description": "Browser regression tooling for the local karaoke player",
+  "description": "Offline karaoke player with React, TypeScript, Node.js and Electron",
   "scripts": {
-    "test:browser": "python3 tests/run_browser.py"
+    "dev": "node --import tsx scripts/dev.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",
+    "start": "node dist/server/cli.js",
+    "start:desktop": "electron .",
+    "desktop": "npm run build && npm run start:desktop",
+    "test": "node --import tsx --test tests/server.test.ts",
+    "test:browser": "npm run build && node --import tsx tests/run-browser.ts",
+    "test:desktop": "npm run build && node --import tsx tests/desktop.test.ts",
+    "package": "npm run build && electron-forge package",
+    "make": "npm run build && electron-forge make",
+    "make:windows": "npm run build && electron-builder --config electron-builder.config.cjs --win portable --x64",
+    "test:titlebar": "npm run build && node --import tsx tests/titlebar.test.ts",
+    "test:audience-ui": "npm run build && node --import tsx tests/audience-ui.test.ts"
   },
   "devDependencies": {
-    "playwright": "1.63.0"
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "playwright": "1.63.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "lucide-react": "^1.45.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "@radix-ui/react-slot": "^1.3.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.3.0"
+  },
+  "type": "module",
+  "main": "dist/electron/main.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "overrides": {
+    "tar": "^7.5.22",
+    "extract-zip": "^2.0.1",
+    "tmp": "^0.2.7"
   }
 }

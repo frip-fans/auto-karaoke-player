@@ -1,0 +1,167 @@
+name: Test, build and release
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Validate release tag and master ancestry
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          assert.match(process.env.RELEASE_TAG, /^v\d+\.\d+\.\d+$/);
+          assert.equal(process.env.RELEASE_TAG, `v${pkg.version}`);
+          assert.equal(lock.version, pkg.version);
+          assert.equal(lock.packages[''].version, pkg.version);
+          JS
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+      - run: npm ci
+      - name: Install test media and display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg xvfb
+          npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm test
+      - name: Browser and window UI regression tests
+        run: |
+          node --import tsx tests/run-browser.ts
+          node --import tsx tests/titlebar.test.ts
+          node --import tsx tests/audience-ui.test.ts
+      - name: Electron regression tests
+        run: xvfb-run -a node --import tsx tests/desktop.test.ts
+
+  desktop:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: macOS
+            arch: arm64
+          - runner: macos-15-intel
+            platform: macOS
+            arch: x64
+          - runner: windows-2022
+            platform: Windows
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          architecture: ${{ matrix.arch }}
+      - run: npm ci
+      - name: Download and verify bundled FFmpeg and ffprobe
+        run: node scripts/prepare-media-tools.mjs
+      - name: Test server with the bundled media tools
+        run: npm test
+      - name: Build macOS ZIP
+        if: runner.os == 'macOS'
+        run: npm run make -- --arch=${{ matrix.arch }}
+      - name: Build Windows portable EXE
+        if: runner.os == 'Windows'
+        run: npm run make:windows -- --publish never
+      - name: Collect release files and checksums
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readdirSync, readFileSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import path from 'node:path';
+          const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+          const platform = process.env.TARGET_PLATFORM;
+          const arch = process.env.TARGET_ARCH;
+          const root = platform === 'Windows' ? 'out/windows' : `out/make/zip/darwin/${arch}`;
+          const ext = platform === 'Windows' ? '.exe' : '.zip';
+          const files = readdirSync(root).filter(file => file.endsWith(ext));
+          if (files.length !== 1) throw new Error(`Expected one ${ext} in ${root}: ${files}`);
+          mkdirSync('release-assets', { recursive: true });
+          const name = `Auto-Karaoke-Player-${version}-${platform}-${arch}${ext}`;
+          const dest = path.join('release-assets', name);
+          copyFileSync(path.join(root, files[0]), dest);
+          writeFileSync(`${dest}.sha256`, `${createHash('sha256').update(readFileSync(dest)).digest('hex')}  ${name}\n`);
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    needs: desktop
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cat > release-notes.md <<'NOTES'
+          离线卡拉 OK 桌面播放器，内置 FFmpeg / ffprobe，无需安装 Node.js 或 Python。
+
+          - Apple Silicon Mac：下载 macOS-arm64.zip。
+          - Intel Mac：下载 macOS-x64.zip。
+          - Windows 10/11 x64：下载 Windows-x64.exe，双击运行。
+
+          Mac 解压后将 Karaoke.app 放入「应用程序」。当前构建未签名、未公证，macOS 可能拦截；确认来源后可在「系统设置 → 隐私与安全性」允许打开。Windows 可能显示未知发布者提示。
+
+          每个安装包都提供 SHA-256 校验文件；媒体工具的许可证、上游说明和来源信息包含在应用资源目录中。
+          NOTES
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --verify-tag --title "Auto Karaoke Player $RELEASE_TAG" --notes-file release-notes.md
+          fi

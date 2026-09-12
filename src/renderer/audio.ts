@@ -1,9 +1,13 @@
 // Both stems are scheduled against one hardware audio clock. Video never emits audio.
 export class StemPlayer {
-  constructor(onEnd) { this.onEnd=onEnd; this.offset=0; this.playing=false; this.generation=0; this.buffers=[]; }
+  onEnd: () => void;
+  offset = 0; playing = false; generation = 0; duration = 0; started = 0;
+  buffers: (AudioBuffer | null)[] = []; sources: AudioBufferSourceNode[] = [];
+  ctx!: AudioContext; master!: GainNode; limiter!: DynamicsCompressorNode; gains!: GainNode[];
+  constructor(onEnd: () => void) { this.onEnd=onEnd; this.offset=0; this.playing=false; this.generation=0; this.buffers=[]; }
   async unlock() {
     if (!this.ctx) {
-      this.ctx=new (window.AudioContext||window.webkitAudioContext)();
+      this.ctx=new window.AudioContext();
       this.master=this.ctx.createGain(); this.master.gain.value=.8;
       this.limiter=this.ctx.createDynamicsCompressor();
       this.limiter.threshold.value=-1; this.limiter.knee.value=0; this.limiter.ratio.value=20;
@@ -14,7 +18,7 @@ export class StemPlayer {
     }
     await this.ctx.resume();
   }
-  setLevels(backing,vocals,master) {
+  setLevels(backing: number,vocals: number,master: number) {
     if(!this.ctx)return;
     [backing,vocals].forEach((v,i)=>this.gains[i].gain.setTargetAtTime(v,this.ctx.currentTime,.015));
     this.master.gain.setTargetAtTime(master,this.ctx.currentTime,.015);
@@ -22,7 +26,7 @@ export class StemPlayer {
   position() { return Math.min(this.duration||0, this.playing ? this.offset+Math.max(0,this.ctx.currentTime-this.started) : this.offset); }
   pause() { this.offset=this.position();this.playing=false;this.generation++;(this.sources||[]).forEach(s=>{s.onended=null;try{s.stop();}catch{}s.disconnect();});this.sources=[]; }
   clear() { this.pause(); this.buffers=[]; this.offset=0; this.duration=0; }
-  load(buffers,duration) {this.clear();this.buffers=buffers;this.duration=Math.min(duration,buffers[0].duration);}
+  load(buffers: (AudioBuffer | null)[],duration: number) {this.clear();this.buffers=buffers;this.duration=Math.min(duration,buffers[0]!.duration);}
   start(offset=this.offset) {
     this.pause();
     if(!this.buffers.length)return;
@@ -35,8 +39,8 @@ export class StemPlayer {
       const node=this.ctx.createBufferSource();node.buffer=buffer;node.connect(this.gains[i]);
       if(i===0)node.onended=()=>{if(this.generation===generation&&this.playing){this.offset=this.duration;this.pause();this.onEnd();}};
       node.start(this.started,this.offset,this.duration-this.offset);return node;
-    }).filter(Boolean);
+    }).filter((node): node is AudioBufferSourceNode => node !== null);
     this.playing=true;
   }
-  seek(offset) {const playing=this.playing;this.pause();this.offset=Math.max(0,Math.min(offset,this.duration||0));if(playing&&this.offset<this.duration)this.start(this.offset);}
+  seek(offset: number) {const playing=this.playing;this.pause();this.offset=Math.max(0,Math.min(offset,this.duration||0));if(playing&&this.offset<this.duration)this.start(this.offset);}
 }

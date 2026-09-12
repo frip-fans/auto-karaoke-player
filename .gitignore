@@ -27,3 +27,10 @@ library.json
 
 # Optional browser regression dependencies
 node_modules/
+
+# TypeScript/Vite/Electron build outputs
+/dist/
+/out/
+/media-tools/
+/release-assets/
+*.tsbuildinfo
