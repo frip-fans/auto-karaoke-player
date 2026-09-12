@@ -125,7 +125,7 @@ git tag -a v0.1.8 -m "Auto Karaoke Player v0.1.8"
 git push --atomic origin master v0.1.8
 ```
 
-也可在 Actions 页面手动运行工作流，仅生成测试用构建产物；手动运行不发布 Release。只有全部测试和三种打包任务成功后，tag 工作流才会发布 Release。
+也可在 Actions 页面选择分支手动运行工作流，仅生成测试用构建产物。对已有 tag 补跑发布可执行 `gh workflow run build.yml --ref vX.Y.Z`；只有全部测试和三种打包任务成功后，tag 工作流才会发布 Release。
 
 `scripts/prepare-media-tools.mjs` 在目标系统下载并验证媒体工具，CI 自动设置打包和测试所用路径。Mac 使用 [ffmpeg-static b6.1.1](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1) 的对应架构独立二进制，Windows 使用下述 Gyan 构建；许可证、README、来源和下载校验值随包分发。Mac runner 架构使用 [GitHub 的标准 runner 标签](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 明确区分。
 
