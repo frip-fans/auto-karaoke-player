@@ -58,6 +58,31 @@ await page.locator('#search').fill('no matching song');
 assert.equal(await page.locator('.song').count(),0);
 await page.locator('#search').fill('');await expandAlbums();
 await page.getByRole('button',{name:'点歌',exact:true}).first().click();
+const firstVersion=page.locator('.version').nth(0), secondVersion=page.locator('.version').nth(1);
+assert.deepEqual(await firstVersion.locator('.queue-position').allTextContents(),['1']);
+assert.equal(await secondVersion.locator('.queue-position').count(),0);
+await secondVersion.locator('.queue-request').click();
+await firstVersion.locator('.queue-request').hover();
+assert.equal(await firstVersion.locator('.queue-request-again').isVisible(),true);
+await firstVersion.locator('.queue-request').click();
+assert.deepEqual(await firstVersion.locator('.queue-position').allTextContents(),['1','3']);
+assert.deepEqual(await secondVersion.locator('.queue-position').allTextContents(),['2']);
+await page.locator('#search').hover();
+assert.equal(await firstVersion.locator('.queue-request-idle').isVisible(),true);
+await page.reload();await page.waitForFunction(()=>karaoke.queue.length===3);await expandAlbums();
+assert.deepEqual(await firstVersion.locator('.queue-position').allTextContents(),['1','3']);
+await page.click('[data-tab=queue]');
+await page.locator('.song').nth(2).getByRole('button',{name:'上移',exact:true}).click();
+await page.locator('.song').first().getByRole('button',{name:'移除',exact:true}).click();
+await page.click('[data-tab=library]');await expandAlbums();
+assert.deepEqual(await firstVersion.locator('.queue-position').allTextContents(),['1']);
+assert.deepEqual(await secondVersion.locator('.queue-position').allTextContents(),['2']);
+await page.click('[data-tab=queue]');
+await page.locator('.song').first().getByRole('button',{name:'移除',exact:true}).click();
+await page.click('[data-tab=library]');await expandAlbums();
+assert.equal(await firstVersion.locator('.queue-position').count(),0);
+assert.equal(await firstVersion.getByRole('button',{name:'点歌',exact:true}).count(),1);
+assert.deepEqual(await secondVersion.locator('.queue-position').allTextContents(),['1']);
 await page.click('[data-tab=queue]');
 assert.equal(await page.locator('.song').count(),1);
 await page.getByRole('button',{name:'移除',exact:true}).click();
@@ -139,5 +164,53 @@ assert.ok(Math.abs((await page.locator('.collection').boundingBox()).width-origi
 await page.setViewportSize({width:390,height:844});
 assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
 assert.equal(await separator.isVisible(),false);
-assert.deepEqual(errors,[]);await popup.close();await browser.close();console.log('PASS: shared sample schedule, independent vocal gain, pause/seek, audience mute, metadata, local persistence and natural end.');
+// Album file drops use the first saved song, including collapsed and filtered albums.
+await page.setViewportSize({width:1440,height:1050});
+await page.evaluate(async()=>{
+  const ids=karaoke.songs.map(s=>s.id);
+  for (let i=0;i<ids.length;i++) await karaoke.api('/api/songs/'+ids[i],'PATCH',{
+    album:i<2?'Drop target':'Other album',title:i===0?'A first':'Z later',artist:i===0?'First artist':'Later artist',version:i===0?'First live':'Later version'
+  });
+  await karaoke.api('/api/library/order','POST',{album:'Drop target',song_ids:ids.slice(0,2)});
+  await karaoke.refresh();
+});
+const albumFiles=await page.evaluateHandle(bytes=>{
+  const dt=new DataTransfer();
+  for(const name of ['Album drop one.mp4','Album drop two.mp4'])dt.items.add(new File([new Uint8Array(bytes)],name,{type:'video/mp4'}));
+  return dt;
+},Array.from(require('node:fs').readFileSync(process.env.KARAOKE_TEST_MEDIA_FILE)));
+const albumTarget=page.locator('[data-album="Drop target"]');
+const assertAlbumDefaults=async()=>{
+  for(const [key,value] of Object.entries({album:'Drop target',artist:'First artist',version:'First live',title:''}))
+    assert.equal(await page.locator(`#import-form [name=${key}]`).inputValue(),value);
+  assert.equal(await page.locator('#import-form [name=files]').evaluate(n=>n.files.length),2);
+};
+assert.equal(await albumTarget.locator('.album-toggle').getAttribute('aria-expanded'),'false');
+await albumTarget.locator('.album-info strong').dispatchEvent('dragenter',{dataTransfer:albumFiles});
+await albumTarget.locator('.album-info strong').dispatchEvent('dragover',{dataTransfer:albumFiles});
+assert.equal(await page.locator('.file-drop-target').count(),1);
+assert.ok((await page.locator('.drop-overlay').innerText()).includes('Drop target'));
+await albumTarget.locator('.album-info strong').dispatchEvent('drop',{dataTransfer:albumFiles});
+await assertAlbumDefaults();
+assert.equal(await page.locator('.drop-overlay').count(),0);
+await page.getByRole('button',{name:'取消',exact:true}).click();
+// A regular import must not retain the previous album defaults.
+await page.click('#import-open');
+for(const key of ['album','artist','version'])assert.equal(await page.locator(`#import-form [name=${key}]`).inputValue(),'');
+await page.getByRole('button',{name:'取消',exact:true}).click();
+await page.locator('.collection').dispatchEvent('drop',{dataTransfer:albumFiles});
+for(const key of ['album','artist','version'])assert.equal(await page.locator(`#import-form [name=${key}]`).inputValue(),'');
+await page.getByRole('button',{name:'取消',exact:true}).click();
+await page.locator('#search').fill('Z later');
+await page.waitForFunction(()=>document.querySelector('[data-album="Drop target"] .song-title')?.textContent==='Z later');
+await albumTarget.locator('.song-title').dispatchEvent('drop',{dataTransfer:albumFiles});
+await assertAlbumDefaults();
+await page.locator('#import-form [name=version]').fill('Edited live');
+await page.click('#import-submit');
+await page.waitForFunction(()=>karaoke.songs.length===5);
+const imported=await page.evaluate(()=>karaoke.songs.filter(s=>s.original_filename?.startsWith('Album drop ')));
+assert.equal(imported.length,2);
+assert.ok(imported.every(s=>s.album==='Drop target'&&s.artist==='First artist'&&s.version==='Edited live'));
+await albumFiles.dispose();
+assert.deepEqual(errors,[]);await popup.close();await browser.close();console.log('PASS: playback, metadata, sorting, album drop defaults, filtered/collapsed targets and batch import.');
 })().catch(e=>{console.error(e);process.exit(1);});

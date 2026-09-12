@@ -17,7 +17,7 @@ export interface MetadataRecord {
 }
 export interface MetadataMatch { method: 'sha256' | 'filename' | 'title'; record: MetadataRecord }
 
-export interface PlaybackState { kind: 'state'; song: { id: string; title: string; duration: number } | null; position: number; playing: boolean; sent: number; revision: number }
+export interface PlaybackState { kind: 'state'; song: { id: string; title: string; duration: number } | null; upcoming?: { title: string; artist: string; version: string } | null; position: number; playing: boolean; sent: number; revision: number }
 
 export const songGroupKey = (song: Song) => JSON.stringify([song.album, song.title, song.artist]);
 export const compareSongOrder = (a: Song, b: Song) => (a.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.sort_order ?? Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title);

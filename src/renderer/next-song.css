@@ -1,0 +1,20 @@
+#stage, #audience-stage { container-type: inline-size; }
+.next-song-overlay {
+  position: absolute;
+  top: 1em;
+  right: 1em;
+  z-index: 5;
+  max-width: calc(100% - 3em);
+  padding: .4em .6em;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: .4em;
+  color: #eee;
+  background: rgba(12, 14, 20, .72);
+  font: 500 max(12px, 2.5cqw)/1.5 system-ui, sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.next-song-overlay[hidden] { display: none; }
+body.is-fullscreen #audience-stage > .next-song-overlay { right: max(54px, 1em); max-width: calc(100% - 3em - 38px); }

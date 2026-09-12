@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { Controller } from './controller';
 import './styles.css';
+import './next-song.css';
 import { installTitlebarInsets } from './titlebar';
 const disposeTitlebarInsets = installTitlebarInsets();
 import.meta.hot?.dispose(disposeTitlebarInsets);

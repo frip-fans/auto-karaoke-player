@@ -9,6 +9,24 @@ export class Controller {
   albumOrder: string[] = [];
   reordering = false;
   current: PublicSong | null = null; loading = false; muted = false; status = '就绪'; message = ''; folder = '';
+  noticeScope: 'app' | 'library' = 'app';
+  private autoStartAt: number | null = null;
+  get autoStartSeconds() { return this.autoStartAt === null ? 0 : Math.max(0, Math.ceil((this.autoStartAt - Date.now()) / 1000)); }
+  private get idle() { return !this.loading && !this.player.playing && (!this.current || !this.player.buffers.length || this.player.position() >= this.player.duration); }
+  private cancelAutoStart() { this.autoStartAt = null; }
+  get upcomingSong() {
+    const remaining = this.player.duration - this.player.position();
+    return this.current && this.player.playing && !this.loading && remaining > 0 && remaining <= 45
+      ? this.songs.find(song => song.id === this.queue[0]) : undefined;
+  }
+  private tickAutoStart() {
+    if (this.autoStartAt === null) return;
+    if (!this.queue.length || !this.idle) { this.cancelAutoStart(); return; }
+    if (Date.now() >= this.autoStartAt) {
+      this.cancelAutoStart();
+      void this.next().catch(error => this.notice(error.message));
+    }
+  }
   readonly channelId = crypto.randomUUID();
   private channel = new BroadcastChannel('karaoke-' + this.channelId);
   readonly player = new StemPlayer(() => { this.record(); void this.next().catch(e => this.notice(e.message)); });
@@ -22,11 +40,12 @@ export class Controller {
   constructor() { this.channel.onmessage = event => { if (event.data.kind === 'ready') this.broadcast(); }; }
   mount(video: HTMLVideoElement) {
     this.video = video;
-    this.timer = setInterval(() => { this.syncVideo(); this.broadcast(); this.changed(); }, 200);
+    this.timer = setInterval(() => { this.tickAutoStart(); this.syncVideo(); this.broadcast(); this.changed(); }, 200);
     void this.refresh().catch(e => this.notice(e.message));
   }
-  destroy() { this.generation++; this.abortLoad?.abort(); clearInterval(this.timer); clearTimeout(this.noticeTimer); this.channel.postMessage({ kind: 'closed' }); this.channel.close(); this.player.clear(); void this.player.ctx?.close(); }
-  notice(message: string) { this.message = message; clearTimeout(this.noticeTimer); this.noticeTimer = setTimeout(() => { this.message = ''; this.changed(); }, 6000); this.changed(); }
+  destroy() { this.cancelAutoStart(); this.generation++; this.abortLoad?.abort(); clearInterval(this.timer); clearTimeout(this.noticeTimer); this.channel.postMessage({ kind: 'closed' }); this.channel.close(); this.player.clear(); void this.player.ctx?.close(); }
+  notice(message: string, scope: 'app' | 'library' = 'app') { this.message = message; this.noticeScope = scope; clearTimeout(this.noticeTimer); this.noticeTimer = setTimeout(() => { this.message = ''; this.changed(); }, 6000); this.changed(); }
+  libraryNotice(message: string) { this.notice(message, 'library'); }
   async api<T>(url: string, method = 'GET', body?: FormData | object): Promise<T> {
     const headers: Record<string, string> = { 'X-Karaoke-Token': this.token };
     if (body && !(body instanceof FormData)) headers['Content-Type'] = 'application/json';
@@ -54,8 +73,19 @@ export class Controller {
   setLevel(key: keyof Settings, value: number) { this.settings[key] = value; this.levels(); this.changed(); }
   toggleMute() { this.muted = !this.muted; this.levels(); this.changed(); }
   toggleGuide() { if (!this.player.buffers[1]) return; this.setLevel('vocals', this.settings.vocals > 0 ? 0 : 1); }
-  add = (id: string) => { this.queue.push(id); this.persist(); this.notice('已加入待唱'); };
-  remove(index: number) { this.queue.splice(index, 1); this.persist(); this.changed(); }
+  add = (id: string) => {
+    this.queue.push(id);
+    if (this.idle && this.autoStartAt === null) {
+      const deadline = this.autoStartAt = Date.now() + 10000;
+      // Unlock during the user's click so playback is allowed after the countdown.
+      void this.player.unlock().catch(error => {
+        if (this.autoStartAt !== deadline) return;
+        this.cancelAutoStart(); this.notice(error.message);
+      });
+    }
+    this.persist(); this.libraryNotice('已加入待唱');
+  };
+  remove(index: number) { this.queue.splice(index, 1); if (!this.queue.length) this.cancelAutoStart(); this.persist(); this.changed(); }
   moveUp(index: number) { if (index > 0) { [this.queue[index - 1], this.queue[index]] = [this.queue[index], this.queue[index - 1]]; this.persist(); this.changed(); } }
   async reorderAlbum(source: string, target: string, after = false) {
     if (this.reordering || source === target) return;
@@ -66,7 +96,7 @@ export class Controller {
     this.reordering = true; this.changed();
     try {
       const result = await this.api<Library>('/api/library/albums/order', 'POST', { albums });
-      this.songs = result.songs; this.albumOrder = result.album_order || []; this.notice('已保存专辑顺序');
+      this.songs = result.songs; this.albumOrder = result.album_order || []; this.libraryNotice('已保存专辑顺序');
     } finally { this.reordering = false; this.changed(); }
   }
   async moveAlbum(name: string, direction: -1 | 1) {
@@ -92,7 +122,7 @@ export class Controller {
     this.reordering = true; this.changed();
     try {
       const result = await this.api<Library>('/api/library/order', 'POST', { album: source.album, song_ids: groups.flat().map(s => s.id) });
-      this.songs = result.songs; this.albumOrder = result.album_order || []; this.notice('已保存专辑内的歌曲顺序');
+      this.songs = result.songs; this.albumOrder = result.album_order || []; this.libraryNotice('已保存专辑内的歌曲顺序');
     } finally { this.reordering = false; this.changed(); }
   }
   async moveLibrarySong(id: string, direction: -1 | 1) {
@@ -102,6 +132,7 @@ export class Controller {
   }
   private record() { if (this.current) { this.history = [{ id: this.current.id, at: Date.now() }, ...this.history].slice(0, 100); this.persist(); this.changed(); } }
   loadSong = async (id: string, queueIndex?: number) => {
+    this.cancelAutoStart();
     await this.player.unlock();
     const generation = ++this.generation; this.transportRevision++;
     this.abortLoad?.abort(); this.abortLoad = new AbortController();
@@ -138,6 +169,9 @@ export class Controller {
     this.changed();
   };
   play = async () => {
+    const startingQueue = this.autoStartAt !== null;
+    this.cancelAutoStart();
+    if (startingQueue) { await this.next(); return; }
     if (this.loading) return;
     if (!this.current) { await this.next(); return; }
     if (!this.player.buffers.length) return;
@@ -146,7 +180,7 @@ export class Controller {
     void this.video!.play().catch(e => { if (e.name !== 'AbortError') this.notice('视频未能播放，请检查 MP4 是否为浏览器支持的 H.264 编码'); });
     this.status = '播放中'; this.broadcast(); this.changed();
   };
-  pause = () => { this.transportRevision++; this.player.pause(); this.video?.pause(); this.status = '已暂停'; this.broadcast(); this.changed(); };
+  pause = () => { this.cancelAutoStart(); this.transportRevision++; this.player.pause(); this.video?.pause(); this.status = '已暂停'; this.broadcast(); this.changed(); };
   async next() { if (this.queue.length) await this.loadSong(this.queue[0], 0); else { this.pause(); this.status = '待唱列表为空'; this.changed(); } }
   seek(value: number) { this.transportRevision++; this.player.seek(value); this.lastVideoSeek = -Infinity; this.syncVideo(true); this.broadcast(); this.changed(); }
   private targetPosition() { return Math.max(0, Math.min(this.player.duration || this.current?.duration || 0, this.player.position() - this.settings.delay / 1000)); }
@@ -158,7 +192,7 @@ export class Controller {
     if (this.player.playing && this.video.paused) void this.video.play().catch(() => {});
     if (!this.player.playing && !this.video.paused) this.video.pause();
   }
-  private broadcast() { this.channel.postMessage({ kind: 'state', song: this.current ? { id: this.current.id, title: this.current.title, duration: this.current.duration } : null, position: this.targetPosition(), playing: this.player.playing && !this.loading, sent: performance.timeOrigin + performance.now(), revision: this.transportRevision }); }
+  private broadcast() { const next = this.upcomingSong; this.channel.postMessage({ kind: 'state', upcoming: next ? { title: next.title, artist: next.artist, version: next.version } : null, song: this.current ? { id: this.current.id, title: this.current.title, duration: this.current.duration } : null, position: this.targetPosition(), playing: this.player.playing && !this.loading, sent: performance.timeOrigin + performance.now(), revision: this.transportRevision }); }
   openDisplay() {
     const popup = window.open('/display?session=' + this.channelId, 'karaoke-display-' + this.channelId, 'popup,width=1280,height=720');
     this.notice(popup ? '将观众窗口拖到 HDMI 屏幕，再点击全屏' : '请允许弹出窗口');

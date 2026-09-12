@@ -1,9 +1,17 @@
 import { installTitlebarInsets } from './titlebar';
 import type { PlaybackState } from '../shared/types';
+import './next-song.css';
 const disposeTitlebarInsets = installTitlebarInsets();
 const fullscreenButton = document.querySelector<HTMLButtonElement>('#audience-fullscreen')!;
 const video = document.querySelector('video')!;
 const hint = document.querySelector<HTMLElement>('#hint')!;
+const upcoming = document.querySelector<HTMLElement>('#next-song')!;
+function updateUpcoming() {
+  const song = state?.playing ? state.upcoming : null;
+  upcoming.hidden = !song;
+  upcoming.textContent = song ? `下一首：${song.title}` : '';
+  upcoming.title = song ? [song.title, song.artist, song.version].filter(Boolean).join(' · ') : '';
+}
 const channel = new BroadcastChannel('karaoke-' + new URLSearchParams(location.search).get('session'));
 let state: PlaybackState | null = null;
 let receivedAt = 0, lastSent = -Infinity, lastSeek = -Infinity, lastRequest = 0, forceSeek = false, playPending = false;
@@ -19,7 +27,7 @@ function play() {
 }
 function sync() {
   if (!state?.song) return;
-  if (window.opener?.closed) { video.pause(); message('控制窗口已关闭'); return; }
+  if (window.opener?.closed) { upcoming.hidden = true; video.pause(); message('控制窗口已关闭'); return; }
   // Keep playing through delayed heartbeats (e.g. a hidden controller or native dialog).
   if (performance.now() - receivedAt > 2000 && performance.now() - lastRequest > 2000) { lastRequest = performance.now(); channel.postMessage({ kind: 'ready' }); }
   const duration = Number.isFinite(video.duration) ? video.duration : state.song.duration;
@@ -39,13 +47,14 @@ function sync() {
   if (state.playing && target < duration - .025) play();
 }
 channel.onmessage = event => {
-  if (event.data.kind === 'closed') { state = null; video.pause(); message('控制窗口已关闭'); return; }
+  if (event.data.kind === 'closed') { state = null; updateUpcoming(); video.pause(); message('控制窗口已关闭'); return; }
   if (event.data.kind !== 'state') return;
   const update = event.data as PlaybackState;
   if (!Number.isFinite(update.sent) || update.sent < lastSent || !Number.isFinite(update.position)) return;
   lastSent = update.sent;
   forceSeek ||= update.revision !== state?.revision || update.song?.id !== state?.song?.id;
   state = update; receivedAt = performance.now();
+  updateUpcoming();
   if (!state.song) { video.pause(); message('等待点歌…'); return; }
   if (video.dataset.song !== state.song.id) {
     video.dataset.song = state.song.id; video.src = '/video/' + encodeURIComponent(state.song.id); lastSeek = -Infinity;

@@ -56,6 +56,8 @@ jobs:
           node --import tsx tests/run-browser.ts
           node --import tsx tests/titlebar.test.ts
           node --import tsx tests/audience-ui.test.ts
+          node --import tsx tests/next-song.test.ts
+          node --import tsx tests/auto-start.test.ts
       - name: Electron regression tests
         run: xvfb-run -a node --import tsx tests/desktop.test.ts
 
