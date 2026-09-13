@@ -119,16 +119,16 @@ npm run test:desktop
 
 每个包附有 `.sha256` 校验文件。Mac 解压后将 `Karaoke.app` 放入「应用程序」。CI 默认生成未签名、未公证的包；macOS 可能需要在「系统设置 → 隐私与安全性」允许打开，Windows 可能显示未知发布者提示。无需配置 Apple 或 Windows 签名凭据。
 
-以后发版时，在 `master` 上更新版本、提交后打 tag（以下以 `0.1.9` 为例）：
+以后发版时，在 `master` 上更新版本、提交后打 tag（以下以 `0.1.10` 为例）：
 
 ```bash
 git switch master
 git pull --ff-only
-npm version 0.1.9 --no-git-tag-version
+npm version 0.1.10 --no-git-tag-version
 git add package.json package-lock.json
-git commit -m "chore: release v0.1.9"
-git tag -a v0.1.9 -m "Auto Karaoke Player v0.1.9"
-git push --atomic origin master v0.1.9
+git commit -m "chore: release v0.1.10"
+git tag -a v0.1.10 -m "Auto Karaoke Player v0.1.10"
+git push --atomic origin master v0.1.10
 ```
 
 也可在 Actions 页面选择分支手动运行工作流，仅生成测试用构建产物。对已有 tag 补跑发布可执行 `gh workflow run build.yml --ref vX.Y.Z`；只有全部测试和三种打包任务成功后，tag 工作流才会发布 Release。
@@ -143,7 +143,7 @@ Windows 单文件便携版使用 electron-builder 的 `portable` 目标：
 KARAOKE_MEDIA_TOOLS_DIR=/absolute/path/windows/media-tools npm run make:windows
 ```
 
-输出 `out/windows/Auto-Karaoke-Player-0.1.8-Windows-x64.exe`。Windows 10/11 x64 用户只需双击这个 EXE，不需要安装或手动解压；运行时自动展开内置文件到临时目录。曲库默认存放在文档目录，可在应用中切换；队列和设置保存在用户应用数据目录。不要把歌曲放到自动解压的临时目录。此便携构建未签名，Windows 可能显示未知发布者提示。
+输出 `out/windows/Auto-Karaoke-Player-0.1.9-Windows-x64.exe`。Windows 10/11 x64 用户只需双击这个 EXE，不需要安装或手动解压；运行时自动展开内置文件到临时目录。曲库默认存放在文档目录，可在应用中切换；队列和设置保存在用户应用数据目录。不要把歌曲放到自动解压的临时目录。此便携构建未签名，Windows 可能显示未知发布者提示。
 
 Windows 媒体工具使用 Gyan 的 FFmpeg 9.0.1 essentials x64 构建；发布目录同时包含上游 LICENSE、README 和来源信息。构建前校验原始 ZIP 的 SHA-256：`fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9`。下载地址见 [Gyan 发布页](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.1)。
 

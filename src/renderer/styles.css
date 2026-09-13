@@ -289,7 +289,7 @@ button:disabled { opacity: .45; cursor: default; }
 .album-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .album-info strong, .album-info small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .album-info strong { font-size: 14px; font-weight: 600; color: #ffffff; }
-.album-info small { color: var(--dim); margin-top: 1px; font-size: 11.5px; }
+.album-info small { color: var(--dim); margin-top: 1px; font-size: 11.5px; text-transform: none; }
 
 .album-count { font-size: 11px; color: var(--muted); font-weight: 500; }
 .album-toggle > .lucide { color: var(--muted); transition: transform .18s cubic-bezier(0.4, 0, 0.2, 1); }

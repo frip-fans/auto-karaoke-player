@@ -1,6 +1,6 @@
 {
   "name": "auto-karaoke-player",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "Offline karaoke player with React, TypeScript, Node.js and Electron",
   "scripts": {

@@ -174,6 +174,7 @@ await page.evaluate(async()=>{
   await karaoke.api('/api/library/order','POST',{album:'Drop target',song_ids:ids.slice(0,2)});
   await karaoke.refresh();
 });
+assert.equal(await page.locator('[data-album="Drop target"] .album-info small').evaluate(node=>getComputedStyle(node).textTransform),'none');
 const albumFiles=await page.evaluateHandle(bytes=>{
   const dt=new DataTransfer();
   for(const name of ['Album drop one.mp4','Album drop two.mp4'])dt.items.add(new File([new Uint8Array(bytes)],name,{type:'video/mp4'}));
