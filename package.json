@@ -1,9 +1,10 @@
 {
   "name": "auto-karaoke-player",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "Offline karaoke player with React, TypeScript, Node.js and Electron",
   "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
     "dev": "node --import tsx scripts/dev.ts",
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build && tsc -p tsconfig.server.json",

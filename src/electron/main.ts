@@ -18,8 +18,10 @@ else {
     nativeTheme.themeSource = 'dark';
     const isMac = process.platform === 'darwin';
     const isWin = process.platform === 'win32';
+    const icon = fileURLToPath(new URL('../web/icons/app.png', import.meta.url));
+    if (isMac) app.dock?.setIcon(icon);
     mainWindow = new BrowserWindow({
-      width: 1440, height: 1000, minWidth: 760, minHeight: 600, backgroundColor: '#0c0e14', autoHideMenuBar: true,
+      icon, width: 1440, height: 1000, minWidth: 760, minHeight: 600, backgroundColor: '#0c0e14', autoHideMenuBar: true,
       ...(isMac ? { titleBarStyle: 'hiddenInset' } : isWin ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0c0e14', symbolColor: '#f9fafb', height: 44 } } : {}),
       webPreferences: { preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false }
     });
@@ -64,7 +66,7 @@ else {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
-          width: 1280, height: 720, autoHideMenuBar: true, backgroundColor: '#000000',
+          icon, width: 1280, height: 720, autoHideMenuBar: true, backgroundColor: '#000000',
           ...(isMac ? { titleBarStyle: 'hiddenInset' } : isWin ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#000000', symbolColor: '#ffffff', height: 40 } } : {}),
           webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false }
         }

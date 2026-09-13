@@ -10,7 +10,7 @@ module.exports = {
   npmRebuild: false,
   files: ['dist/**/*', 'package.json'],
   extraResources: tools ? [{ from: path.resolve(tools), to: 'media-tools' }] : [],
-  win: { target: [{ target: 'portable', arch: ['x64'] }], executableName: 'Auto Karaoke Player', signExecutable: false },
+  win: { icon: path.resolve(__dirname, 'assets/app.ico'), target: [{ target: 'portable', arch: ['x64'] }], executableName: 'Auto Karaoke Player', signExecutable: false },
   portable: { artifactName: 'Auto-Karaoke-Player-${version}-Windows-x64.exe', requestExecutionLevel: 'user', unpackDirName: false },
   beforePack: async context => {
     if (context.electronPlatformName !== 'win32') throw new Error('This configuration builds the Windows portable app.');

@@ -73,7 +73,7 @@ button:disabled { opacity: .45; cursor: default; }
 
 .lucide { width: 16px; height: 16px; stroke-width: 2; flex-shrink: 0; }
 .brand { display: inline-flex; align-items: center; }
-.brand > .lucide { width: 26px; height: 26px; color: var(--accent); }
+.brand > .app-icon { width: 30px; height: 30px; flex-shrink: 0; }
 .local { display: inline-flex; align-items: center; gap: 6px; }
 .local > .lucide { width: 6px; height: 6px; fill: currentColor; }
 .disc > .lucide { width: 18px; height: 18px; }

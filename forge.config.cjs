@@ -5,6 +5,7 @@ module.exports = {
   packagerConfig: {
     asar: true,
     name: 'Karaoke',
+    icon: path.resolve(__dirname, 'assets/app'),
     executableName: 'Karaoke',
     win32metadata: { CompanyName: 'auto-karaoke-player', FileDescription: '本地唱片室 · Offline Karaoke', ProductName: 'Karaoke' },
     extraResource: tools ? [path.resolve(tools)] : [],

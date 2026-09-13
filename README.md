@@ -164,3 +164,7 @@ Windows 顶栏按系统窗口按钮的实际区域自动避让，窗口大小和
 本仓库负责曲库、播放、混音与投屏。歌词制作、分离、时间轴审核和视频烧录由制作工具负责。媒体、曲库、缓存和分发 ZIP 不进入 Git；合成测试不使用真实歌曲。默认曲库为根目录 `songs/`，也可用 `--library` 指定任意可读写曲库目录。
 
 开发依赖审计：已约束 tar 和 tmp 到修复版本。打包工具链间接使用的 extract-zip 当前仍有上游未修复的审计告警；不进入播放器运行依赖。构建仅使用官方发布来源及校验过的媒体压缩包。
+
+## 应用图标
+
+桌面应用、Dock / 任务栏、主窗口和观众页面共用橙色唱片播放图标。矢量源为 `src/renderer/public/icons/app.svg`，PNG 与平台图标已提交，正常构建无需额外生成。修改源图后执行 `npx playwright install chromium` 和 `npm run icons`，统一更新 PNG、Windows ICO 与 macOS ICNS。
