@@ -62,6 +62,13 @@ button:disabled { opacity: .45; cursor: default; }
 .metadata-candidate strong { font-size: 14px; color: #ffffff; }
 .metadata-candidate span { font-size: 12px; color: var(--dim); margin-top: 2px; }
 .fingerprint { overflow-wrap: anywhere; font-size: 12px; color: var(--dim); }
+.source-actions { margin-top: 18px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
+.source-actions label { margin-top: 0; }
+.source-actions p { margin-bottom: 12px; }
+.edit-footer .spacer { flex: 1; }
+.danger-button { background: #b42318; color: #fff; }
+.danger-button:hover { background: #d92d20; }
+#delete-dialog { width: min(440px, 94vw); }
 @media(max-width:500px) { .metadata-candidate { flex-wrap: wrap; } }
 
 .lucide { width: 16px; height: 16px; stroke-width: 2; flex-shrink: 0; }

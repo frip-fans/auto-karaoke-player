@@ -45,10 +45,20 @@ export async function createApp(folder: string, options: { webRoot?: string; med
     } finally { await Promise.all(files.map(f => rm(f.path, { force: true }))); }
     res.json({ songs, errors });
   });
+  app.put('/api/songs/:id/source', upload.single('file'), async (req, res) => {
+    const file = req.file;
+    if (!file) throw new Error('请选择 MP4 文件');
+    try {
+      const filename = path.basename(Buffer.from(file.originalname, 'latin1').toString('utf8').replaceAll('\\', '/'));
+      if (path.extname(filename).toLowerCase() !== '.mp4') throw new Error('只接受 MP4 文件');
+      res.json(await store.replaceSource(req.params.id as string, file.path, filename));
+    } finally { await rm(file.path, { force: true }); }
+  });
   app.patch('/api/songs/:id', async (req, res) => {
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new Error('无效的歌曲信息');
     res.json(await store.edit(req.params.id, req.body));
   });
+  app.delete('/api/songs/:id', async (req, res) => { await store.delete(req.params.id); res.sendStatus(204); });
   app.route('/api/songs/:id/prepare')
     .get(async (req, res) => { res.json(await store.preparation(req.params.id, false)); })
     .post(async (req, res) => { res.json(await store.preparation(req.params.id, true)); });

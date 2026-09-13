@@ -30,6 +30,13 @@ export class LibraryStore {
     const record = song.sha256 ? this.index().exact(song.sha256) : undefined;
     if (record) applyMetadata(song, record, true);
   }
+  private async sourceReferenced(source: string, excludeId: string) {
+    for (const song of this.db.songs) {
+      if (song.id === excludeId) continue;
+      try { if (await this.source(song) === source) return true; } catch { /* Missing records do not retain a source file. */ }
+    }
+    return false;
+  }
 
   constructor(readonly folder: string, readonly media: MediaTools) { this.cache = path.join(folder, '.karaoke-cache'); }
   async init() {
@@ -120,6 +127,34 @@ export class LibraryStore {
       this.db.songs.push(song);
       try { await this.save(); } catch (e) { this.db.songs.pop(); await rm(path.join(this.folder, song.file), { force: true }); throw e; }
       return this.public(song);
+    });
+  }
+  async replaceSource(id: string, file: string, filename: string) {
+    const info = await this.media.probe(file), fingerprint = await this.fingerprint(file);
+    return this.mutate(async () => {
+      const song = this.lookup(id), previousSource = await this.source(song).catch(() => undefined);
+      const replacementFile = `media/${id}-${randomUUID().replaceAll('-', '')}.mp4`;
+      const replacementSource = path.join(this.folder, replacementFile);
+      await mkdir(path.dirname(replacementSource), { recursive: true });
+      await rename(file, replacementSource);
+      const updated: Song = { ...song, file: replacementFile, original_filename: filename, metadata_auto: false, ...info, ...fingerprint };
+      delete updated.mapping;
+      const index = this.db.songs.indexOf(song); this.db.songs[index] = updated;
+      try { await this.save(); }
+      catch (error) { this.db.songs[index] = song; await rm(replacementSource, { force: true }); throw error; }
+      if (previousSource && !(await this.sourceReferenced(previousSource, id))) await rm(previousSource, { force: true });
+      return this.public(updated);
+    });
+  }
+  async delete(id: string) {
+    return this.mutate(async () => {
+      const song = this.lookup(id), source = await this.source(song).catch(() => undefined);
+      const index = this.db.songs.indexOf(song), previousAlbumOrder = this.db.album_order;
+      this.db.songs.splice(index, 1);
+      if (!this.db.songs.some(other => other.album === song.album)) this.db.album_order = previousAlbumOrder?.filter(album => album !== song.album);
+      try { await this.save(); }
+      catch (error) { this.db.songs.splice(index, 0, song); this.db.album_order = previousAlbumOrder; throw error; }
+      if (source && !(await this.sourceReferenced(source, id))) await rm(source, { force: true });
     });
   }
   async edit(id: string, data: Record<string, unknown>) {

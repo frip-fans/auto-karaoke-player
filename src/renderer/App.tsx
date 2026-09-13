@@ -12,7 +12,7 @@ const time = (s: number) => `${Math.floor((s || 0) / 60)}:${String(Math.floor((s
 export function App({ controller: c }: { controller: Controller }) {
   useSyncExternalStore(c.subscribe, c.snapshot);
   const video = useRef<HTMLVideoElement>(null), stage = useRef<HTMLDivElement>(null);
-  const importDialog = useRef<HTMLDialogElement>(null), editDialog = useRef<HTMLDialogElement>(null), settingsDetails = useRef<HTMLDetailsElement>(null);
+  const importDialog = useRef<HTMLDialogElement>(null), editDialog = useRef<HTMLDialogElement>(null), deleteDialog = useRef<HTMLDialogElement>(null), settingsDetails = useRef<HTMLDetailsElement>(null);
   const tipsContainer = useRef<HTMLDivElement>(null);
   const [tipsOpen, setTipsOpen] = useState(false);
   const tipsOpenRef = useRef(tipsOpen);
@@ -32,7 +32,8 @@ export function App({ controller: c }: { controller: Controller }) {
   useEffect(() => {
     if (query.trim()) setExpandedAlbums(new Set(c.songs.filter(song => [song.title, song.artist, song.album, song.version].join(' ').toLowerCase().includes(query.trim().toLowerCase())).map(song => song.album)));
   }, [query, c.songs]);
-  const [editing, setEditing] = useState<PublicSong | null>(null), [importing, setImporting] = useState(false), [scanning, setScanning] = useState(false);
+  const [editing, setEditing] = useState<PublicSong | null>(null), [pendingDelete, setPendingDelete] = useState<PublicSong | null>(null);
+  const [importing, setImporting] = useState(false), [replacing, setReplacing] = useState(false), [deleting, setDeleting] = useState(false), [scanning, setScanning] = useState(false);
   const run = (fn: () => unknown) => { void Promise.resolve().then(fn).catch(e => c.notice(e.message)); };
   const runLibrary = (fn: () => unknown) => { void Promise.resolve().then(fn).catch(e => c.libraryNotice(e.message)); };
   function openImport(files?: File[], album?: string) {
@@ -101,6 +102,7 @@ export function App({ controller: c }: { controller: Controller }) {
     };
   }, [c]);
   useEffect(() => { if (editing) editDialog.current?.showModal(); }, [editing]);
+  useEffect(() => { if (pendingDelete) deleteDialog.current?.showModal(); }, [pendingDelete]);
   const matches = (song: PublicSong) => [song.title, song.artist, song.album, song.version].join(' ').toLowerCase().includes(query.trim().toLowerCase());
   const groups = new Map<string, PublicSong[]>();
   for (const song of c.songs.filter(matches).sort(compareSongOrder)) {
@@ -243,6 +245,17 @@ export function App({ controller: c }: { controller: Controller }) {
       event.preventDefault(); const data = new FormData(event.currentTarget); const body = Object.fromEntries(['title', 'artist', 'album', 'version'].map(key => [key, data.get(key)]));
       runLibrary(async () => { await c.api('/api/songs/' + editing.id, 'PATCH', { ...body, mapping: { instrumental: data.get('instrumental') === '' ? null : Number(data.get('instrumental')), vocals: data.get('vocals') === '' ? null : Number(data.get('vocals')) } }); editDialog.current?.close(); await c.refresh(); c.libraryNotice('已保存到曲库；音轨修改在下次播放生效'); });
     }}><h2>歌曲与版本</h2>{editing.metadata_matches?.length ? <div className="metadata-candidates"><h3>找到已保存的歌曲信息</h3><p>相同文件名或曲名可能属于不同版本，请确认后采用。</p>{editing.metadata_matches.map((match, index) => <div className="metadata-candidate" key={index}><div><small>{match.method === 'sha256' ? '相同视频指纹' : match.method === 'filename' ? '相同文件名 · 需确认' : '相同歌曲名 · 需确认'}</small><strong>{match.record.title}</strong><span>{[match.record.artist, match.record.album, match.record.version].filter(Boolean).join(' · ')}</span></div><Button type="button" size="sm" variant="outline" onClick={() => runLibrary(async () => { await c.api('/api/songs/' + editing.id + '/match', 'POST', match.record); editDialog.current?.close(); await c.refresh(); c.libraryNotice('已采用歌曲信息；音轨对应关系仅在视频指纹相同时恢复'); })}><Check aria-hidden="true" />采用此记录</Button></div>)}</div> : null}
-      <p className="fingerprint">原文件名：{editing.original_filename || editing.file.split('/').pop()}<br />{editing.sha256 && <>SHA-256：<code title={editing.sha256}>{editing.sha256.slice(0, 16)}…</code></>}</p>{(['title', 'album', 'artist', 'version'] as const).map((key, index) => <label key={key}>{['曲名', '专辑', '歌手', '版本'][index]}<Input name={key} defaultValue={editing[key]} required={key !== 'artist'} /></label>)}<details><summary>音轨对应关系</summary><p>仅将分离的 vocal-only 轨道选为纯人声。Original Mix 是完整原曲。</p>{(['instrumental', 'vocals'] as const).map(role => <label key={role}>{role === 'instrumental' ? '伴奏' : '纯人声'}<select name={role} defaultValue={editing[role] ?? ''}><option value="">{role === 'instrumental' ? '请选择音轨' : '无纯人声'}</option>{editing.tracks.map(t => <option key={t.index} value={t.index}>轨道 {t.index} · {t.name}</option>)}</select></label>)}</details><footer><Button type="button" variant="outline" onClick={() => editDialog.current?.close()}><X aria-hidden="true" />取消</Button><Button className="primary"><Save aria-hidden="true" />保存</Button></footer></form>}</dialog>
+      <p className="fingerprint">原文件名：{editing.original_filename || editing.file.split('/').pop()}<br />{editing.sha256 && <>SHA-256：<code title={editing.sha256}>{editing.sha256.slice(0, 16)}…</code></>}</p>{(['title', 'album', 'artist', 'version'] as const).map((key, index) => <label key={key}>{['曲名', '专辑', '歌手', '版本'][index]}<Input name={key} defaultValue={editing[key]} required={key !== 'artist'} /></label>)}<details><summary>音轨对应关系</summary><p>仅将分离的 vocal-only 轨道选为纯人声。Original Mix 是完整原曲。</p>{(['instrumental', 'vocals'] as const).map(role => <label key={role}>{role === 'instrumental' ? '伴奏' : '纯人声'}<select name={role} defaultValue={editing[role] ?? ''}><option value="">{role === 'instrumental' ? '请选择音轨' : '无纯人声'}</option>{editing.tracks.map(t => <option key={t.index} value={t.index}>轨道 {t.index} · {t.name}</option>)}</select></label>)}</details>
+      <div className="source-actions"><label>新的 MP4 文件<Input name="replacement" type="file" accept=".mp4,video/mp4" disabled={replacing} /></label><p>新文件会复制进曲库；替换成功后只删除曲库里的旧文件，不会删除你电脑中选择的原件。</p><Button type="button" variant="outline" disabled={replacing} onClick={event => {
+        const input = event.currentTarget.form?.elements.namedItem('replacement');
+        if (!(input instanceof HTMLInputElement) || !input.files?.[0]) { c.libraryNotice('请先选择新的 MP4 文件'); return; }
+        const data = new FormData(); data.set('file', input.files[0]); setReplacing(true);
+        runLibrary(async () => { try { await c.api('/api/songs/' + editing.id + '/source', 'PUT', data); editDialog.current?.close(); await c.refresh(); c.libraryNotice('已替换源文件并删除曲库中的旧文件；请重新确认音轨'); } finally { setReplacing(false); } });
+      }}>{replacing ? <LoaderCircle className="spin" aria-hidden="true" /> : <FileVideo aria-hidden="true" />}{replacing ? '正在替换…' : '替换源文件'}</Button></div>
+      <footer className="edit-footer"><Button type="button" className="danger-button" disabled={replacing} onClick={() => { setPendingDelete(editing); editDialog.current?.close(); }}><Trash2 aria-hidden="true" />删除歌曲</Button><span className="spacer" /><Button type="button" variant="outline" disabled={replacing} onClick={() => editDialog.current?.close()}><X aria-hidden="true" />取消</Button><Button className="primary" disabled={replacing}><Save aria-hidden="true" />保存</Button></footer></form>}</dialog>
+    <dialog id="delete-dialog" ref={deleteDialog} onClose={() => setPendingDelete(null)}>{pendingDelete && <form onSubmit={event => {
+      event.preventDefault(); const song = pendingDelete; setDeleting(true);
+      runLibrary(async () => { try { await c.api('/api/songs/' + song.id, 'DELETE'); deleteDialog.current?.close(); await c.refresh(); c.libraryNotice(`已删除《${song.title}》及其曲库源文件`); } finally { setDeleting(false); } });
+    }}><h2>确认删除歌曲？</h2><p>将从资料库删除《{pendingDelete.title}》，并删除软件曲库中的源文件。此操作无法撤销，但不会影响你电脑中曲库之外的原件。</p><footer><Button type="button" variant="outline" disabled={deleting} onClick={() => deleteDialog.current?.close()}><X aria-hidden="true" />取消</Button><Button className="danger-button" disabled={deleting}>{deleting ? <LoaderCircle className="spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}{deleting ? '正在删除…' : '确认删除'}</Button></footer></form>}</dialog>
   </>;
 }

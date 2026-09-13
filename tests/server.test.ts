@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile, cp, writeFile, symlink, readdir } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, cp, writeFile, symlink, readdir, access } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { request } from 'node:http';
@@ -89,6 +89,26 @@ test('Original Mix is never classified as isolated vocals; invalid edits are ato
     const bad = await fetch(route, { method: 'PATCH', headers: { ...s.headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Must not persist', mapping: { instrumental: 1, vocals: 1 } }) }); assert.equal(bad.status, 400);
     assert.equal(s.store.lookup(song.id).title, song.title);
     const good = await fetch(route, { method: 'PATCH', headers: { ...s.headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ album: 'New album', version: 'Live' }) }); assert.equal((await good.json()).version, 'Live');
+  } finally { await s.close(); }
+});
+test('replacing a source preserves metadata, resets track mapping and removes the old library file; deleting removes the new file', async () => {
+  const s = await setup();
+  try {
+    const song = await s.upload();
+    await s.store.edit(song.id, { mapping: { instrumental: 1, vocals: 2 } });
+    const oldSource = path.join(s.folder, song.file);
+    const form = new FormData(); form.set('file', new Blob([await readFile(path.join(root, 'original.mp4'))]), '替换版本.mp4');
+    const response = await fetch(s.url + '/api/songs/' + song.id + '/source', { method: 'PUT', headers: s.headers, body: form });
+    assert.equal(response.status, 200);
+    const replaced = await response.json() as PublicSong;
+    assert.equal(replaced.id, song.id); assert.equal(replaced.title, song.title); assert.equal(replaced.album, song.album);
+    assert.equal(replaced.original_filename, '替换版本.mp4'); assert.notEqual(replaced.sha256, song.sha256);
+    assert.equal(replaced.mapping, undefined); assert.equal(replaced.instrumental, 1); assert.equal(replaced.vocals, null);
+    await assert.rejects(access(oldSource), { code: 'ENOENT' });
+    const replacementSource = path.join(s.folder, replaced.file); await access(replacementSource);
+    const deleted = await fetch(s.url + '/api/songs/' + song.id, { method: 'DELETE', headers: s.headers });
+    assert.equal(deleted.status, 204); assert.throws(() => s.store.lookup(song.id), { status: 404 });
+    await assert.rejects(access(replacementSource), { code: 'ENOENT' });
   } finally { await s.close(); }
 });
 test('mutations reject missing token, foreign origin and host; source paths cannot escape library', async () => {
