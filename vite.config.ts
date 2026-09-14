@@ -5,5 +5,5 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   root: 'src/renderer', plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src/renderer', import.meta.url)) } },
-  build: { outDir: '../../dist/web', emptyOutDir: true, rollupOptions: { input: { main: 'src/renderer/index.html', display: 'src/renderer/display.html' } } },
+  build: { outDir: '../../dist/web', emptyOutDir: true, rollupOptions: { input: { main: 'src/renderer/index.html', display: 'src/renderer/display.html', startup: 'src/renderer/startup.html' } } },
 });

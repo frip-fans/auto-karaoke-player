@@ -14,6 +14,9 @@ try {
   try {
     const page = await app.firstWindow();
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    await page.waitForFunction(() => !!window.karaoke);
+    assert.equal(await page.locator('#library-count').textContent(), '0');
+    await page.locator('#scan').click();
     await page.waitForFunction(() => window.karaoke?.songs.length === 1);
     if (occupied) assert.notEqual(new URL(page.url()).port, '8787');
     const initialOrigin = new URL(page.url()).origin;

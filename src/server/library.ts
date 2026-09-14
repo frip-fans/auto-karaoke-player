@@ -44,7 +44,6 @@ export class LibraryStore {
     try { this.db = JSON.parse(await readFile(path.join(this.folder, 'library.json'), 'utf8')); }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; this.db = { schema_version: 1, library_id: randomUUID().replaceAll('-', ''), songs: [] }; }
     if (this.db.schema_version !== 1 || !Array.isArray(this.db.songs)) throw new Error('不支持的曲库版本');
-    await this.scan();
   }
   // Serialize read-modify-write operations, including asynchronous scans/imports.
   mutate<T>(fn: () => Promise<T>): Promise<T> {

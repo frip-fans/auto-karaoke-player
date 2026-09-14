@@ -17,7 +17,6 @@ export class MediaTools {
       child.once('close', code => { this.children.delete(child); code === 0 ? resolve(stdout) : reject(new Error(stderr || `${program} 执行失败 (${code})`)); });
     });
   }
-  async check() { await this.run(this.ffmpeg, ['-version']); await this.run(this.ffprobe, ['-version']); }
   async probe(path: string) {
     const data = JSON.parse(await this.run(this.ffprobe, ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', path])) as {
       streams: { index: number; codec_type: string; codec_name: string; tags?: Record<string, string> }[];

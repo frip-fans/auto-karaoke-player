@@ -3,8 +3,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createApp, listen, listenAvailable, serverPort, serverUrl, closeServer } from '../server/app.js';
-import { MediaTools } from '../server/media.js';
 
 // Both playback windows must retain their renderer priority when focus moves between them.
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
@@ -20,6 +18,19 @@ else {
     nativeTheme.themeSource = 'dark';
     const isMac = process.platform === 'darwin';
     const isWin = process.platform === 'win32';
+    mainWindow = new BrowserWindow({
+      width: 1440, height: 1000, minWidth: 760, minHeight: 600, backgroundColor: '#0c0e14', autoHideMenuBar: true,
+      ...(isMac ? { titleBarStyle: 'hiddenInset' } : isWin ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0c0e14', symbolColor: '#f9fafb', height: 44 } } : {}),
+      webPreferences: { preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false }
+    });
+    mainWindow.on('closed', () => { mainWindow = null; app.quit(); });
+    await mainWindow.loadFile(fileURLToPath(new URL('../web/startup.html', import.meta.url)));
+
+    // Keep server modules (including Express and Multer) off the critical path
+    // until Chromium has painted a responsive startup window.
+    const [{ createApp, listen, listenAvailable, serverPort, serverUrl, closeServer }, { MediaTools }] = await Promise.all([
+      import('../server/app.js'), import('../server/media.js')
+    ]);
     const settingsPath = path.join(app.getPath('userData'), 'library-location.json');
     let folder = path.join(app.getPath('documents'), 'Karaoke', 'songs');
     try { const saved = JSON.parse(await readFile(settingsPath, 'utf8')); if (typeof saved.folder === 'string') folder = saved.folder; } catch { /* First launch uses Documents. */ }
@@ -44,11 +55,7 @@ else {
     const activePort = serverPort(server);
     shutdown = async () => { await closeServer(server); await service.store.close(); };
     const origin = serverUrl(server);
-    mainWindow = new BrowserWindow({
-      width: 1440, height: 1000, minWidth: 760, minHeight: 600, backgroundColor: '#0c0e14', autoHideMenuBar: true,
-      ...(isMac ? { titleBarStyle: 'hiddenInset' } : isWin ? { titleBarStyle: 'hidden', titleBarOverlay: { color: '#0c0e14', symbolColor: '#f9fafb', height: 44 } } : {}),
-      webPreferences: { preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)), nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false }
-    });
+    if (!mainWindow) { await shutdown(); shutdown = undefined; return; }
     const localUrl = (url: string) => { try { return new URL(url).origin === origin; } catch { return false; } };
     const protect = (window: BrowserWindow) => { window.webContents.on('will-navigate', (event, url) => { if (!localUrl(url)) event.preventDefault(); }); };
     protect(mainWindow);
@@ -80,7 +87,6 @@ else {
       await writeFile(settingsPath, JSON.stringify({ folder: result.filePaths[0] }));
       await mainWindow.loadURL(origin);
     });
-    mainWindow.on('closed', () => { mainWindow = null; app.quit(); });
     await mainWindow.loadURL(origin);
   }).catch(error => { console.error('MAIN ERROR CAUGHT:', error); dialog.showErrorBox('无法启动本地唱片室', `${error.message}\n请根据上面的具体错误检查运行环境。`); app.quit(); });
   app.on('before-quit', event => {

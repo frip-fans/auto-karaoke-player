@@ -52,6 +52,16 @@ test('imports distinct versions, preserves v1 catalog IDs and relative paths aft
     try { assert.equal(moved.store.db.library_id, catalog.library_id); assert.equal(moved.store.db.songs.length, 2); assert.ok((await moved.store.public(moved.store.db.songs[0])).playable); } finally { await moved.store.close(); }
   } finally { await s.close(); }
 });
+test('startup loads the catalog without scanning files or launching media tools', async () => {
+  const folder = await mkdtemp(path.join(root, 'lazy-startup-'));
+  await cp(path.join(root, 'source.mp4'), path.join(folder, 'unindexed.mp4'));
+  const { MediaTools } = await import('../src/server/media.js');
+  const service = await createApp(folder, { media: new MediaTools('missing-ffmpeg', 'missing-ffprobe') });
+  try {
+    assert.equal(service.store.db.songs.length, 0);
+    assert.deepEqual(await readdir(folder), ['.karaoke-cache', 'unindexed.mp4']);
+  } finally { await service.store.close(); }
+});
 test('PCM roles, duration, stereo rate and HTTP range responses', async () => {
   const s = await setup();
   try {

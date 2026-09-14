@@ -10,7 +10,6 @@ import { LibraryStore } from './library.js';
 export async function createApp(folder: string, options: { webRoot?: string; media?: MediaTools } = {}) {
   await mkdir(folder, { recursive: true });
   const media = options.media || new MediaTools();
-  await media.check();
   const store = new LibraryStore(await realpath(folder), media);
   await store.init();
   const app = express(), token = randomBytes(32).toString('base64url');
