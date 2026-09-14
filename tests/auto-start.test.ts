@@ -11,6 +11,7 @@ try {
   await fixture(path.join(root, 'First.mp4'), 'Vocals', false, 20);
   await copyFile(path.join(root, 'First.mp4'), path.join(root, 'Second.mp4'));
   const { app, store } = await createApp(root, { webRoot: path.resolve('dist/web') });
+  await store.scan();
   const server = await listen(app);
   // Exercise real click activation rather than disabling the browser's autoplay policy.
   const browser = await chromium.launch({ headless: true });

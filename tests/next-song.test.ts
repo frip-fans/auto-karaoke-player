@@ -12,6 +12,7 @@ try {
   await copyFile(path.join(root, 'Current.mp4'), path.join(root, 'Next.mp4'));
   await copyFile(path.join(root, 'Current.mp4'), path.join(root, 'Later.mp4'));
   const { app, store } = await createApp(root, { webRoot: path.resolve('dist/web') });
+  await store.scan();
   const server = await listen(app);
   const browser = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
   try {
