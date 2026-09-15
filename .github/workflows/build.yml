@@ -58,6 +58,7 @@ jobs:
           node --import tsx tests/audience-ui.test.ts
           node --import tsx tests/next-song.test.ts
           node --import tsx tests/auto-start.test.ts
+          node --import tsx tests/rendering.test.ts
       - name: Electron regression tests
         run: xvfb-run -a node --import tsx tests/desktop.test.ts
 
@@ -71,9 +72,6 @@ jobs:
           - runner: macos-15
             platform: macOS
             arch: arm64
-          - runner: macos-15-intel
-            platform: macOS
-            arch: x64
           - runner: windows-2022
             platform: Windows
             arch: x64
@@ -155,7 +153,6 @@ jobs:
           离线卡拉 OK 桌面播放器，内置 FFmpeg / ffprobe，无需安装 Node.js 或 Python。
 
           - Apple Silicon Mac：下载 macOS-arm64.zip。
-          - Intel Mac：下载 macOS-x64.zip。
           - Windows 10/11 x64：下载 Windows-x64.exe，双击运行。
 
           Mac 解压后将 Karaoke.app 放入「应用程序」。当前构建未签名、未公证，macOS 可能拦截；确认来源后可在「系统设置 → 隐私与安全性」允许打开。Windows 可能显示未知发布者提示。

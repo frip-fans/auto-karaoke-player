@@ -103,7 +103,10 @@ npm test
 npx playwright install chromium
 npm run test:browser
 npm run test:desktop
+npm run test:rendering
 ```
+
+渲染回归使用 1,001 首测试曲目，验证播放进度更新时曲库不重复渲染，以及空闲、暂停、下一首提示和搜索行为。
 
 测试只使用合成视频。服务测试覆盖曲库搬迁、原曲音轨排除、延迟轨道补零、音轨频率与长度、Range 请求、请求校验及并发导入。浏览器测试覆盖双轨同步启动、独立混音、暂停定位、观众窗口静音、编辑和持久化。桌面测试用 Electron 验证服务启动、preload、播放与观众窗口；Linux CI 需要 Xvfb 等虚拟显示（例如 `xvfb-run -a npm run test:desktop`）；自动化测试不替代真实 HDMI 和声卡验证。
 
@@ -114,10 +117,9 @@ npm run test:desktop
 [GitHub Actions](https://github.com/frip-fans/auto-karaoke-player/actions/workflows/build.yml) 在 `master` / `main` 提交和 PR 时运行构建、服务、浏览器、窗口 UI 和 Electron 回归测试。推送 `vX.Y.Z` tag 后会先验证 tag 与 `package.json` / `package-lock.json` 的版本一致，且提交属于 `master` 历史，再构建并上传到 [GitHub Releases](https://github.com/frip-fans/auto-karaoke-player/releases)：
 
 - macOS Apple Silicon：`Auto-Karaoke-Player-X.Y.Z-macOS-arm64.zip`
-- macOS Intel：`Auto-Karaoke-Player-X.Y.Z-macOS-x64.zip`
 - Windows x64 便携版：`Auto-Karaoke-Player-X.Y.Z-Windows-x64.exe`
 
-每个包附有 `.sha256` 校验文件。Mac 解压后将 `Karaoke.app` 放入「应用程序」。CI 默认生成未签名、未公证的包；macOS 可能需要在「系统设置 → 隐私与安全性」允许打开，Windows 可能显示未知发布者提示。无需配置 Apple 或 Windows 签名凭据。
+macOS 仅支持 Apple Silicon（M 系列），不再提供 Intel 构建。每个包附有 `.sha256` 校验文件。Mac 解压后将 `Karaoke.app` 放入「应用程序」。CI 默认生成未签名、未公证的包；macOS 可能需要在「系统设置 → 隐私与安全性」允许打开，Windows 可能显示未知发布者提示。无需配置 Apple 或 Windows 签名凭据。
 
 以后发版时，在 `master` 上更新版本、提交后打 tag（以下以 `0.1.10` 为例）：
 
@@ -131,9 +133,9 @@ git tag -a v0.1.10 -m "Auto Karaoke Player v0.1.10"
 git push --atomic origin master v0.1.10
 ```
 
-也可在 Actions 页面选择分支手动运行工作流，仅生成测试用构建产物。对已有 tag 补跑发布可执行 `gh workflow run build.yml --ref vX.Y.Z`；只有全部测试和三种打包任务成功后，tag 工作流才会发布 Release。
+也可在 Actions 页面选择分支手动运行工作流，仅生成测试用构建产物。对已有 tag 补跑发布可执行 `gh workflow run build.yml --ref vX.Y.Z`；只有全部测试和两种打包任务成功后，tag 工作流才会发布 Release。
 
-`scripts/prepare-media-tools.mjs` 在目标系统下载并验证媒体工具，CI 自动设置打包和测试所用路径。Mac 使用 [ffmpeg-static b6.1.1](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1) 的对应架构独立二进制，Windows 使用下述 Gyan 构建；许可证、README、来源和下载校验值随包分发。Mac runner 架构使用 [GitHub 的标准 runner 标签](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 明确区分。
+`scripts/prepare-media-tools.mjs` 在目标系统下载并验证媒体工具，CI 自动设置打包和测试所用路径。Mac 使用 [ffmpeg-static b6.1.1](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1) 的 arm64 独立二进制，Windows 使用下述 Gyan 构建；许可证、README、来源和下载校验值随包分发。Mac 构建仅使用 Apple Silicon runner。
 
 ### 本地打包
 

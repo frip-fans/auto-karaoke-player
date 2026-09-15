@@ -16,7 +16,8 @@ module.exports = {
   },
   makers: [{ name: '@electron-forge/maker-zip', platforms: ['darwin', 'linux', 'win32'] }],
   hooks: {
-    generateAssets: async (_config, platform) => {
+    generateAssets: async (_config, platform, arch) => {
+      if (platform === 'darwin' && arch !== 'arm64') throw new Error('macOS builds support Apple Silicon (arm64) only.');
       if (!tools || path.basename(tools) !== 'media-tools') throw new Error('Set KARAOKE_MEDIA_TOOLS_DIR to a media-tools directory containing ffmpeg and ffprobe for the target platform.');
       const suffix = platform === 'win32' ? '.exe' : ''; 
       for (const name of ['ffmpeg', 'ffprobe']) fs.accessSync(path.join(tools, name + suffix), fs.constants.R_OK);

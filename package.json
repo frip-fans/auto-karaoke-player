@@ -1,6 +1,6 @@
 {
   "name": "auto-karaoke-player",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "description": "Offline karaoke player with React, TypeScript, Node.js and Electron",
   "scripts": {
@@ -13,6 +13,7 @@
     "desktop": "npm run build && npm run start:desktop",
     "test": "node --import tsx --test tests/server.test.ts",
     "test:browser": "npm run build && node --import tsx tests/run-browser.ts",
+    "test:rendering": "npm run build && node --import tsx tests/rendering.test.ts",
     "test:desktop": "npm run build && node --import tsx tests/desktop.test.ts",
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make",

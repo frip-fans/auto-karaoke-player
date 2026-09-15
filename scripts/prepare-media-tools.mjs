@@ -8,22 +8,14 @@ import os from 'node:os';
 import path from 'node:path';
 
 // Pin upstream releases and verify the downloaded bytes before extracting/executing.
-const mac = {
-  arm64: {
-    ffmpeg: '8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa',
-    ffprobe: 'd986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be',
-    LICENSE: 'cb48bf09a11f5fb576cddb0431c8f5ed0a60157a9ec942adffc13907cbe083f2',
-    README: '05ba4b92c96605434b1aaae3eedf5a2c280c9607bf78ffca9a5b536d9af2dc6a',
-  },
-  x64: {
-    ffmpeg: '929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106',
-    ffprobe: 'd4da574d6e2e197bd259b47d69cf262df9e312af24ad960444f6d806d3d4c186',
-    LICENSE: '2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af',
-    README: 'e88a0325f8e5b75210355e37341824f074d3cd82def2125be54c914b62848a36',
-  },
+const macArm64 = {
+  ffmpeg: '8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa',
+  ffprobe: 'd986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be',
+  LICENSE: 'cb48bf09a11f5fb576cddb0431c8f5ed0a60157a9ec942adffc13907cbe083f2',
+  README: '05ba4b92c96605434b1aaae3eedf5a2c280c9607bf78ffca9a5b536d9af2dc6a',
 };
 const target = `${process.platform}-${process.arch}`;
-if (!(process.platform === 'darwin' && mac[process.arch]) && target !== 'win32-x64') {
+if (target !== 'darwin-arm64' && target !== 'win32-x64') {
   throw new Error(`Unsupported media-tools target: ${target}`);
 }
 const output = path.resolve('media-tools');
@@ -45,12 +37,12 @@ try {
   if (process.platform === 'darwin') {
     const base = 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1';
     for (const name of ['ffmpeg', 'ffprobe']) {
-      const archive = await download(`${base}/${name}-${target}.gz`, mac[process.arch][name]);
+      const archive = await download(`${base}/${name}-${target}.gz`, macArm64[name]);
       await pipeline(createReadStream(archive), createGunzip(), createWriteStream(path.join(output, name)));
       await chmod(path.join(output, name), 0o755);
     }
     for (const name of ['LICENSE', 'README']) {
-      await copyFile(await download(`${base}/${target}.${name}`, mac[process.arch][name]), path.join(output, name));
+      await copyFile(await download(`${base}/${target}.${name}`, macArm64[name]), path.join(output, name));
     }
   } else {
     const archive = await download('https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip', 'fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9');

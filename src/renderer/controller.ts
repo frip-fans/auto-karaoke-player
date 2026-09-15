@@ -33,14 +33,25 @@ export class Controller {
   private token = ''; private storeKey = ''; private loaded = false; private generation = 0;
   private abortLoad?: AbortController; private timer?: ReturnType<typeof setInterval>; private noticeTimer?: ReturnType<typeof setTimeout>;
   private listeners = new Set<() => void>(); private revision = 0; private transportRevision = 0; private lastVideoSeek = -Infinity;
+  // Clock ticks update playback indicators without invalidating the library view.
+  private playbackListeners = new Set<() => void>();
+  private playbackRevision = 0; private lastPosition = 0; private lastCountdown = 0;
   private video?: HTMLVideoElement;
+  subscribePlayback = (fn: () => void) => { this.playbackListeners.add(fn); return () => { this.playbackListeners.delete(fn); }; };
+  playbackSnapshot = () => this.playbackRevision;
+  private playbackChanged(force = false) {
+    const position = this.player.position(), countdown = this.autoStartSeconds;
+    if (!force && position === this.lastPosition && countdown === this.lastCountdown) return;
+    this.lastPosition = position; this.lastCountdown = countdown; this.playbackRevision++;
+    this.playbackListeners.forEach(fn => fn());
+  }
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   snapshot = () => this.revision;
-  changed = () => { this.revision++; this.listeners.forEach(fn => fn()); };
+  changed = () => { this.revision++; this.playbackChanged(true); this.listeners.forEach(fn => fn()); };
   constructor() { this.channel.onmessage = event => { if (event.data.kind === 'ready') this.broadcast(); }; }
   mount(video: HTMLVideoElement) {
     this.video = video;
-    this.timer = setInterval(() => { this.tickAutoStart(); this.syncVideo(); this.broadcast(); this.changed(); }, 200);
+    this.timer = setInterval(() => { this.tickAutoStart(); this.syncVideo(); this.broadcast(); this.playbackChanged(); }, 200);
     void this.refresh().catch(e => this.notice(e.message));
   }
   destroy() { this.cancelAutoStart(); this.generation++; this.abortLoad?.abort(); clearInterval(this.timer); clearTimeout(this.noticeTimer); this.channel.postMessage({ kind: 'closed' }); this.channel.close(); this.player.clear(); void this.player.ctx?.close(); }
@@ -137,7 +148,7 @@ export class Controller {
     const generation = ++this.generation; this.transportRevision++;
     this.abortLoad?.abort(); this.abortLoad = new AbortController();
     this.player.clear(); this.video!.pause(); this.current = this.songs.find(s => s.id === id) || null;
-    if (!this.current) return;
+    if (!this.current) { this.loading = false; this.changed(); return; }
     const selected = this.current;
     this.loading = true; this.status = '准备音轨…'; this.video!.src = '/video/' + id; this.video!.muted = true; this.broadcast(); this.changed();
     try {

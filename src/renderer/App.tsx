@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowUp, Check, ChevronDown, Circle, CircleHelp, Disc3, FileVideo, FolderOpen, GripVertical, History, Keyboard, Library, ListMusic, LoaderCircle, Maximize, MicVocal, MonitorUp, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Search, SkipForward, SlidersHorizontal, Trash2, Upload, Volume2, VolumeX, X } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { AnimatedCollapse } from './AnimatedCollapse';
 import { ResizableLayout } from './ResizableLayout';
 import { Controller, type Settings } from './controller';
+import { PlaybackTimeline, PlaybackStatus, NextSongPreview } from './PlaybackIndicators';
 import { compareSongOrder, songGroupKey, orderedAlbums } from '../shared/types';
 import type { PublicSong } from '../shared/types';
 
-const time = (s: number) => `${Math.floor((s || 0) / 60)}:${String(Math.floor((s || 0) % 60)).padStart(2, '0')}`;
 export function App({ controller: c }: { controller: Controller }) {
   useSyncExternalStore(c.subscribe, c.snapshot);
   const video = useRef<HTMLVideoElement>(null), stage = useRef<HTMLDivElement>(null);
@@ -104,12 +104,22 @@ export function App({ controller: c }: { controller: Controller }) {
   useEffect(() => { if (editing) editDialog.current?.showModal(); }, [editing]);
   useEffect(() => { if (pendingDelete) deleteDialog.current?.showModal(); }, [pendingDelete]);
   const matches = (song: PublicSong) => [song.title, song.artist, song.album, song.version].join(' ').toLowerCase().includes(query.trim().toLowerCase());
-  const groups = new Map<string, PublicSong[]>();
-  for (const song of c.songs.filter(matches).sort(compareSongOrder)) {
-    const key = songGroupKey(song); groups.set(key, [...(groups.get(key) || []), song]);
-  }
-  const groupedAlbums = new Map<string, PublicSong[][]>();
-  for (const group of groups.values()) groupedAlbums.set(group[0].album, [...(groupedAlbums.get(group[0].album) || []), group]);
+  const groupedAlbums = useMemo(() => {
+    const groups = new Map<string, PublicSong[]>();
+    const search = query.trim().toLowerCase();
+    for (const song of c.songs.filter(song => [song.title, song.artist, song.album, song.version].join(' ').toLowerCase().includes(search)).sort(compareSongOrder)) {
+      const key = songGroupKey(song);
+      const group = groups.get(key);
+      if (group) group.push(song); else groups.set(key, [song]);
+    }
+    const albums = new Map<string, PublicSong[][]>();
+    for (const group of groups.values()) {
+      const album = albums.get(group[0].album);
+      if (album) album.push(group); else albums.set(group[0].album, [group]);
+    }
+    return albums;
+  }, [c.songs, query]);
+  const albums = useMemo(() => orderedAlbums(c.songs, c.albumOrder), [c.songs, c.albumOrder]);
   function version(song: PublicSong, index?: number, sortable = false) {
     const editHint = song.metadata_matches?.length ? `编辑歌曲 · ${song.metadata_matches.length} 个匹配候选` : '编辑歌曲';
     const positions = c.queue.flatMap((id, index) => id === song.id ? [index + 1] : []);
@@ -151,9 +161,6 @@ export function App({ controller: c }: { controller: Controller }) {
         runLibrary(() => c.reorderSong(sourceId, song.id, event.clientY > rect.top + rect.height / 2));
       }}><div className="versions">{versions.map((s, i) => version(s, index, sortable && i === 0))}</div></article>;
   }
-  const upcoming = c.upcomingSong;
-  const upcomingLabel = c.autoStartSeconds > 0 ? `${c.autoStartSeconds} 秒后开始播放` : upcoming ? `下一首：${upcoming.title}` : c.status;
-  const upcomingDetails = upcoming ? ['下一首', upcoming.title, upcoming.artist, upcoming.version].filter(Boolean).join(' · ') : c.status;
   const notice = <div id="notice" role="status" style={{ display: c.message ? 'block' : 'none' }}>{c.message}</div>;
   const entries = tab === 'queue' ? c.queue.map((id, index) => ({ id, index })) : c.history.map((h, index) => ({ id: h.id, index }));
   const rows = entries.flatMap(entry => { const song = c.songs.find(s => s.id === entry.id); return song && matches(song) ? [<div key={entry.index}>{card(song, [song], tab === 'queue' ? entry.index : undefined)}</div>] : []; });
@@ -163,10 +170,10 @@ export function App({ controller: c }: { controller: Controller }) {
     return <label className="fader">{label}<input id={key} aria-label={label} type="range" min={min} max={max} step={step} value={c.settings[key]} style={{ '--progress': `${pct.toFixed(1)}%` } as React.CSSProperties} disabled={key === 'vocals' && (c.loading || !c.player.buffers[1])} onInput={e => c.setLevel(key, Number(e.currentTarget.value))} /><output id={`${key}-value`}>{key === 'delay' ? `${c.settings[key]} ms` : `${Math.round(c.settings[key] * 100)}%`}</output></label>;
   }
   return <><header><a className="brand" href="/"><img className="app-icon" src="/icons/app.svg" width="30" height="30" alt="" aria-hidden="true" /> <b>Auto Karaoke Player</b></a><div className="spacer" /><Button id="display" variant="outline" onClick={() => c.openDisplay()}><MonitorUp aria-hidden="true" />观众窗口</Button><Button id="import-open" className="primary" onClick={() => openImport()}><Plus aria-hidden="true" />导入 MP4</Button><details className="settings-popover" ref={settingsDetails}><summary className="settings-trigger" title="曲库与投屏设置" aria-label="曲库与投屏设置"><SlidersHorizontal aria-hidden="true" /><span>设置</span></summary><div className="settings-panel"><div className="settings-header"><div className="settings-title"><SlidersHorizontal aria-hidden="true" /><strong>曲库与投屏设置</strong></div><button type="button" className="settings-close" onClick={() => { if (settingsDetails.current) settingsDetails.current.open = false; }} aria-label="关闭设置"><X aria-hidden="true" /></button></div><div className="settings-body"><div className="settings-section"><span className="settings-section-title">当前曲库路径</span><p id="folder" title={c.folder}>{c.folder}</p><p className="settings-hint">拷贝整个曲库文件夹即可搬家到其他设备。队列、历史和音量保存在当前播放器。</p>{window.desktop && <Button variant="outline" size="sm" onClick={() => run(() => window.desktop!.chooseLibrary())}><FolderOpen aria-hidden="true" />选择曲库文件夹</Button>}</div><div className="settings-section"><span className="settings-section-title">画面延迟补偿</span>{fader('delay', '画面延迟', -300, 300, 10)}<p className="settings-hint">若电视或投影仪处理较慢，可在此微调延迟，正值画面落后声音。</p></div><div className="settings-section"><span className="settings-section-title">HDMI 投屏指引</span><p className="settings-hint">电脑连接电视/投影仪后，在系统设置中选择“扩展屏幕”，点击顶栏“观众窗口”拖到电视后全屏，系统音频输出选择 HDMI。</p></div></div></div></details><div className="tips-menu-container" ref={tipsContainer}><Button id="tips-trigger" variant="ghost" size="sm" className={`tips-trigger${tipsOpen ? ' active' : ''}`} onClick={() => setTipsOpen(v => !v)} title="快捷键与使用技巧" aria-label="快捷键与使用技巧"><CircleHelp aria-hidden="true" /></Button>{tipsOpen && <div className="settings-panel tips-panel"><div className="settings-header"><div className="settings-title"><Keyboard aria-hidden="true" /><strong>快捷键与操作技巧</strong></div><button type="button" className="settings-close" onClick={() => setTipsOpen(false)} aria-label="关闭提示"><X aria-hidden="true" /></button></div><div className="settings-body tips-body"><div className="shortcut-list"><div className="shortcut-row"><div className="shortcut-keys"><kbd>Space</kbd></div><div className="shortcut-desc">播放 / 暂停</div></div><div className="shortcut-row"><div className="shortcut-keys"><kbd>←</kbd> <kbd>→</kbd></div><div className="shortcut-desc">快退 / 快进 5 秒</div></div><div className="shortcut-row"><div className="shortcut-keys"><kbd>V</kbd></div><div className="shortcut-desc">切换伴奏 / 导唱</div></div><div className="shortcut-row"><div className="shortcut-keys"><kbd>F</kbd></div><div className="shortcut-desc">视频舞台全屏</div></div><div className="shortcut-row"><div className="shortcut-keys"><kbd>Esc</kbd></div><div className="shortcut-desc">退出全屏 / 关闭浮层</div></div></div><div className="settings-section" style={{ marginTop: 14, paddingTop: 12 }}><span className="settings-section-title">点歌与排序技巧</span><p className="settings-hint">曲库中点击“点歌”加入待唱列表；拖动专辑左侧唱片把手或使用 <kbd>↑</kbd> <kbd>↓</kbd> 键可快速调整播放优先级。</p></div></div></div>}</div></header>
-    <ResizableLayout><section className="desk"><div id="stage" ref={stage}><video id="video" ref={video} muted playsInline preload="metadata" />{upcoming && <div id="next-song" className="next-song-overlay" title={upcomingDetails}>下一首：{upcoming.title}</div>}{!c.current && <div id="empty"><div className="empty-vinyl-decor" aria-hidden="true"><Disc3 className="vinyl-icon" /></div><span className="eyebrow">YOUR PRIVATE STAGE</span><h1>今晚，唱哪一首？</h1><p>从右侧曲库点歌，或导入你的卡拉 OK 视频。</p></div>}<Button id="fullscreen" variant="ghost" title="画面全屏" aria-label="画面全屏" onClick={fullscreen}><Maximize aria-hidden="true" /></Button></div>
+    <ResizableLayout><section className="desk"><div id="stage" ref={stage}><video id="video" ref={video} muted playsInline preload="metadata" /><NextSongPreview controller={c} />{!c.current && <div id="empty"><div className="empty-vinyl-decor" aria-hidden="true"><Disc3 className="vinyl-icon" /></div><span className="eyebrow">YOUR PRIVATE STAGE</span><h1>今晚，唱哪一首？</h1><p>从右侧曲库点歌，或导入你的卡拉 OK 视频。</p></div>}<Button id="fullscreen" variant="ghost" title="画面全屏" aria-label="画面全屏" onClick={fullscreen}><Maximize aria-hidden="true" /></Button></div>
       <div className="desk-controls">
-        <div className="now"><div><h2 id="now-title">{c.current?.title || '等待点歌'}</h2><p id="now-meta">{c.current ? [c.current.artist, c.current.album, c.current.version].filter(Boolean).join(' · ') : '伴奏与纯人声 · 独立混音'}</p></div><span id="state" title={upcomingDetails} aria-live="polite" aria-atomic="true">{upcomingLabel}</span></div>
-        <div className="timeline"><span id="elapsed">{time(c.player.position())}</span><input id="seek" aria-label="播放进度" type="range" min="0" max={c.player.duration || 1} step=".01" value={c.player.position()} style={{ '--progress': `${(c.player.duration > 0 ? Math.min(100, Math.max(0, (c.player.position() / c.player.duration) * 100)) : 0).toFixed(2)}%` } as React.CSSProperties} disabled={c.loading || !c.player.buffers.length} onInput={e => c.seek(Number(e.currentTarget.value))} /><span id="duration">{time(c.player.duration)}</span></div>
+        <div className="now"><div><h2 id="now-title">{c.current?.title || '等待点歌'}</h2><p id="now-meta">{c.current ? [c.current.artist, c.current.album, c.current.version].filter(Boolean).join(' · ') : '伴奏与纯人声 · 独立混音'}</p></div><PlaybackStatus controller={c} /></div>
+        <PlaybackTimeline controller={c} />
         <div className="transport">
           <div className="transport-playback">
             <Button id="restart" variant="outline" size="sm" title="重新开始" aria-label="重新开始" onClick={() => c.seek(0)}><RotateCcw aria-hidden="true" /></Button>
@@ -204,7 +211,7 @@ export function App({ controller: c }: { controller: Controller }) {
       <nav><div className="tab-group">{(['library', 'queue', 'history'] as const).map(t => <Button key={t} variant="ghost" className={`tab ${tab === t ? 'active' : ''}`} data-tab={t} onClick={() => setTab(t)}>{t === 'library' ? <><Library aria-hidden="true" />曲库 <span id="library-count">{c.songs.length}</span></> : t === 'queue' ? <><ListMusic aria-hidden="true" />待唱 <span id="queue-count">{c.queue.length}</span></> : <><History aria-hidden="true" />最近唱过</>}</Button>)}</div><div className="spacer" /><Button id="scan" variant="ghost" title="扫描曲库文件夹" aria-label="扫描曲库文件夹" disabled={scanning} onClick={() => runLibrary(async () => { setScanning(true); try { await c.refresh(true); } finally { setScanning(false); } })}><RefreshCw className={scanning ? "spin" : undefined} aria-hidden="true" /></Button></nav>
       {tab === 'library' && <div className="drop-hint"><Upload aria-hidden="true" />把 MP4 拖到这里导入</div>}
       <div className="search"><Search aria-hidden="true" /><Input id="search" placeholder="搜索歌曲、专辑、歌手…" aria-label="搜索曲库" value={query} onChange={e => setQuery(e.target.value)} /></div>
-      <div id="list">{tab === 'library' ? orderedAlbums(c.songs, c.albumOrder).filter(name => groupedAlbums.has(name)).map(name => {
+      <div id="list">{tab === 'library' ? albums.filter(name => groupedAlbums.has(name)).map(name => {
         const albumGroups = groupedAlbums.get(name)!;
         const panelId = 'album-content-' + encodeURIComponent(name);
         const expanded = expandedAlbums.has(name), versionCount = albumGroups.reduce((count, group) => count + group.length, 0);
@@ -235,7 +242,7 @@ export function App({ controller: c }: { controller: Controller }) {
           </div>
           <AnimatedCollapse open={expanded} id={panelId}><div className="album-songs">{albumGroups.map(group => card(group[0], group, undefined, true))}</div></AnimatedCollapse>
         </section>;
-      }) : rows}{(tab === 'library' ? groups.size === 0 : rows.length === 0) && <p className="empty-list">{query ? '没有匹配的歌曲。' : tab === 'library' ? '拖入 MP4，或点击“导入 MP4”开始建立曲库。' : tab === 'queue' ? '待唱列表为空，去曲库挑一首吧。' : '这里会留下你唱过的歌。'}</p>}</div>
+      }) : rows}{(tab === 'library' ? groupedAlbums.size === 0 : rows.length === 0) && <p className="empty-list">{query ? '没有匹配的歌曲。' : tab === 'library' ? '拖入 MP4，或点击“导入 MP4”开始建立曲库。' : tab === 'queue' ? '待唱列表为空，去曲库挑一首吧。' : '这里会留下你唱过的歌。'}</p>}</div>
     {c.noticeScope === 'library' && notice}</section></ResizableLayout>{c.noticeScope === 'app' && notice}
     <dialog id="import-dialog" ref={importDialog}><form id="import-form" onSubmit={event => {
       event.preventDefault(); const form = event.currentTarget; setImporting(true);
